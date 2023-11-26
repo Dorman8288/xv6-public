@@ -8,16 +8,17 @@
 #include "spinlock.h"
 #include<stdio.h>
 #include<stdlib.h>
+
+enum Color {BLACK,RED};
 struct node
 {
-    int data;     // for data part
-    char color;  // for color property
- 
+    struct proc *key ;     // for data part
+    enum Color color;  // for color property
+    int virtual_time;
     //links for left, right children and parent
     struct node *left, *right, *parent;
 };
  
-enum Color {BLACK,RED};
 // Left Rotation
 void LeftRotate(struct node **root,struct node *x)
 {
@@ -72,7 +73,7 @@ void rightRotate(struct node **root,struct node *y)
 void insertFixUp(struct node **root,struct node *z)
 {
     // iterate until z is not the root and z's parent color is red
-    while (z != *root && z->parent->color == 'R')
+    while (z != *root && z->parent->color == RED)
     {
         struct node *y;
  
@@ -86,11 +87,11 @@ void insertFixUp(struct node **root,struct node *z)
         // (i)  Change color of parent and uncle as BLACK
         // (ii) Change color of grandparent as RED
         // (iii) Move z to grandparent
-        if (y->color == 'R')
+        if (y->color == RED)
         {
-            y->color = 'B';
-            z->parent->color = 'B';
-            z->parent->parent->color = 'R';
+            y->color = BLACK;
+            z->parent->color = BLACK;
+            z->parent->parent->color = RED;
             z = z->parent->parent;
         }
  
@@ -103,7 +104,7 @@ void insertFixUp(struct node **root,struct node *z)
             if (z->parent == z->parent->parent->left &&
                 z == z->parent->left)
             {
-                char ch = z->parent->color ;
+                enum Color ch = z->parent->color ;
                 z->parent->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
                 rightRotate(root,z->parent->parent);
@@ -116,7 +117,7 @@ void insertFixUp(struct node **root,struct node *z)
             if (z->parent == z->parent->parent->left &&
                 z == z->parent->right)
             {
-                char ch = z->color ;
+                enum Color ch = z->color ;
                 z->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
                 LeftRotate(root,z->parent);
@@ -129,7 +130,7 @@ void insertFixUp(struct node **root,struct node *z)
             if (z->parent == z->parent->parent->right &&
                 z == z->parent->right)
             {
-                char ch = z->parent->color ;
+                enum Color ch= z->parent->color ;
                 z->parent->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
                 LeftRotate(root,z->parent->parent);
@@ -142,7 +143,7 @@ void insertFixUp(struct node **root,struct node *z)
             if (z->parent == z->parent->parent->right &&
                 z == z->parent->left)
             {
-                char ch = z->color ;
+                enum Color ch= z->color ;
                 z->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
                 rightRotate(root,z->parent);
@@ -150,7 +151,7 @@ void insertFixUp(struct node **root,struct node *z)
             }
         }
     }
-    (*root)->color = 'B'; //keep root always black
+    (*root)->color = BLACK; //keep root always black
 }
  
 // Utility function to insert newly node in RedBlack tree
@@ -158,13 +159,13 @@ void insert(struct node **root, int data)
 {
     // Allocate memory for new node
     struct node *z = (struct node*)malloc(sizeof(struct node));
-    z->data = data;
+    z->virtual_time = data;
     z->left = z->right = z->parent = NULL;
  
      //if root is null make z as root
     if (*root == NULL)
     {
-        z->color = 'B';
+        z->color = BLACK;
         (*root) = z;
     }
     else
@@ -176,17 +177,17 @@ void insert(struct node **root, int data)
         while (x != NULL)
         {
             y = x;
-            if (z->data < x->data)
+            if (z->virtual_time < x->virtual_time)
                 x = x->left;
             else
                 x = x->right;
         }
         z->parent = y;
-        if (z->data > y->data)
+        if (z->virtual_time > y->virtual_time)
             y->right = z;
         else
             y->left = z;
-        z->color = 'R';
+        z->color = RED;
  
         // call insertFixUp to fix reb-black tree's property if it
         // is voilated due to insertion.
@@ -195,14 +196,14 @@ void insert(struct node **root, int data)
 }
  
 // A utility function to traverse Red-Black tree in inorder fashion
-void inorder(struct node *root)
-{
-    if (root == NULL)
-        return;
-    inorder(root->left);
-    printf("%d ", root->data);
-    inorder(root->right);
-}
+// void inorder(struct node *root)
+// {
+//     if (root == NULL)
+//         return;
+//     inorder(root->left);
+//     printf("%d ", root->virtual_time);
+//     inorder(root->right);
+// }
  
 struct {
   struct spinlock lock;
