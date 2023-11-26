@@ -19,6 +19,8 @@ struct node
     struct node *left, *right, *parent;
 };
 
+struct node* root = NULL;
+
 //getMin
 struct node* getMin(struct node *root){
   struct node* current = root;
@@ -30,7 +32,7 @@ struct node* getMin(struct node *root){
 
  
 // Left Rotation
-void LeftRotate(struct node **root,struct node *x)
+void LeftRotate(struct node *x)
 {
     //y stored pointer of right child of x
     struct node *y = x->right;
@@ -47,7 +49,7 @@ void LeftRotate(struct node **root,struct node *x)
  
     // if x's parent is null make y as root of tree
     if (x->parent == NULL)
-        (*root) = y;
+        (root) = y;
  
     // store y at the place of x
     else if (x == x->parent->left)
@@ -63,7 +65,7 @@ void LeftRotate(struct node **root,struct node *x)
  
  
 // Right Rotation (Similar to LeftRotate)
-void rightRotate(struct node **root,struct node *y)
+void rightRotate(struct node *y)
 {
     struct node *x = y->left;
     y->left = x->right;
@@ -71,7 +73,7 @@ void rightRotate(struct node **root,struct node *y)
         x->right->parent = y;
     x->parent =y->parent;
     if (x->parent == NULL)
-        (*root) = x;
+        root = x;
     else if (y == y->parent->left)
         y->parent->left = x;
     else y->parent->right = x;
@@ -80,10 +82,10 @@ void rightRotate(struct node **root,struct node *y)
 }
  
 // Utility function to fixup the Red-Black tree after standard BST insertion
-void insertFixUp(struct node **root,struct node *z)
+void insertFixUp(struct node *z)
 {
     // iterate until z is not the root and z's parent color is red
-    while (z != *root && z->parent->color == RED)
+    while (z != root && z->parent->color == RED)
     {
         struct node *y;
  
@@ -117,7 +119,7 @@ void insertFixUp(struct node **root,struct node *z)
                 enum Color ch = z->parent->color ;
                 z->parent->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
-                rightRotate(root,z->parent->parent);
+                rightRotate(z->parent->parent);
             }
  
             // Left-Right (LR) case, do following
@@ -130,8 +132,8 @@ void insertFixUp(struct node **root,struct node *z)
                 enum Color ch = z->color ;
                 z->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
-                LeftRotate(root,z->parent);
-                rightRotate(root,z->parent->parent);
+                LeftRotate(z->parent);
+                rightRotate(z->parent->parent);
             }
  
             // Right-Right (RR) case, do following
@@ -143,7 +145,7 @@ void insertFixUp(struct node **root,struct node *z)
                 enum Color ch= z->parent->color ;
                 z->parent->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
-                LeftRotate(root,z->parent->parent);
+                LeftRotate(z->parent->parent);
             }
  
             // Right-Left (RL) case, do following
@@ -156,16 +158,16 @@ void insertFixUp(struct node **root,struct node *z)
                 enum Color ch= z->color ;
                 z->color = z->parent->parent->color;
                 z->parent->parent->color = ch;
-                rightRotate(root,z->parent);
-                LeftRotate(root,z->parent->parent);
+                rightRotate(z->parent);
+                LeftRotate(z->parent->parent);
             }
         }
     }
-    (*root)->color = BLACK; //keep root always black
+    root->color = BLACK; //keep root always black
 }
  
 // Utility function to insert newly node in RedBlack tree
-void insert(struct node **root, int data)
+void insert(int data)
 {
     // Allocate memory for new node
     struct node *z = (struct node*)malloc(sizeof(struct node));
@@ -173,15 +175,15 @@ void insert(struct node **root, int data)
     z->left = z->right = z->parent = NULL;
  
      //if root is null make z as root
-    if (*root == NULL)
+    if (root == NULL)
     {
         z->color = BLACK;
-        (*root) = z;
+        root = z;
     }
     else
     {
         struct node *y = NULL;
-        struct node *x = (*root);
+        struct node *x = root;
  
         // Follow standard BST insert steps to first insert the node
         while (x != NULL)
@@ -201,7 +203,7 @@ void insert(struct node **root, int data)
  
         // call insertFixUp to fix reb-black tree's property if it
         // is voilated due to insertion.
-        insertFixUp(root,z);
+        insertFixUp(z);
     }
 }
  
