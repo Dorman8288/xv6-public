@@ -18,6 +18,16 @@ struct node
     //links for left, right children and parent
     struct node *left, *right, *parent;
 };
+
+//getMin
+struct node* getMin(struct node *root){
+  struct node* current = root;
+  while(current->left != NULL){
+    current = current->left;
+  }
+  return current;
+}
+
  
 // Left Rotation
 void LeftRotate(struct node **root,struct node *x)
