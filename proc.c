@@ -220,6 +220,11 @@ void insert(int data)
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  int start_time;
+  int proc_start_time;
+  int latency;
+  int min_genurality;
+  int slice_size;
 } ptable;
 
 static struct proc *initproc;
@@ -539,18 +544,32 @@ scheduler(void)
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
+    int sum_weight=0
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
-
+      sum_weight+=p->weight; 
+    }
+    if(ticks-ptable.start_time==ptable.latency){
+      float size=ptable.latency/sum_weight;
+      if(size>=ptable.min_genurality){
+        ptable.slice_size=size;
+      }
+      else{
+        ptable.slice_size=ptable.min_genurality;
+      }
+        ptable.start_time=ticks;
+    }
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      p=getMin(root);
+      p->number_of_slice=ptable.slice_size*p->weight;
       c->proc = p;
       switchuvm(p);
+      ptable.proc_start_time=ticks;
       p->state = RUNNING;
 
       swtch(&(c->scheduler), p->context);
@@ -559,7 +578,6 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
-    }
     release(&ptable.lock);
 
   }
@@ -595,6 +613,8 @@ sched(void)
 void
 yield(void)
 {
+  myproc()->execution_time += ticks -ptable.proc_start_time;
+  myproc()->virtual_time+=(ticks -ptable.proc_start_time)* myproc()->weight;
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
   sched();
