@@ -40,7 +40,7 @@ struct proc {
   uint sz;                     // Size of process memory (bytes)
   pde_t* pgdir;                // Page table
   char *kstack;                // Bottom of kernel stack for this process
-    void *threadstack; 
+  void *threadstack; 
   enum procstate state;        // Process state
   int pid;                     // Process ID
   int count_thread;       
