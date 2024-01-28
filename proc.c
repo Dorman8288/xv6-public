@@ -32,6 +32,89 @@ cpuid() {
   return mycpu()-cpus;
 }
 
+
+// Must be called with interrupts disabled to avoid the caller being
+// rescheduled between reading lapicid and running through the loop.
+struct cpu*
+mycpu(void)
+{
+  int apicid, i;
+  
+  if(readeflags()&FL_IF)
+    panic("mycpu called with interrupts enabled\n");
+  
+  apicid = lapicid();
+  // APIC IDs are not guaranteed to be contiguous. Maybe we should have
+  // a reverse map, or reserve a register to store &cpus[i].
+  for (i = 0; i < ncpu; ++i) {
+    if (cpus[i].apicid == apicid)
+      return &cpus[i];
+  }
+  panic("unknown apicid\n");
+}
+
+// Disable interrupts so that we are not rescheduled
+// while reading proc from the cpu structure
+struct proc*
+myproc(void) {
+  struct cpu *c;
+  struct proc *p;
+  pushcli();
+  c = mycpu();
+  p = c->proc;
+  popcli();
+  return p;
+}
+
+//PAGEBREAK: 32
+// Look in the process table for an UNUSED proc.
+// If found, change state to EMBRYO and initialize
+// state required to run in the kernel.
+// Otherwise return 0.
+static struct proc*
+allocproc(void)
+{
+  struct proc *p;
+  char *sp;
+
+  acquire(&ptable.lock);
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if(p->state == UNUSED)
+      goto found;
+
+  release(&ptable.lock);
+  return 0;
+
+found:
+  p->state = EMBRYO;
+  p->pid = nextpid++;
+
+  release(&ptable.lock);
+
+  // Allocate kernel stack.
+  if((p->kstack = kalloc()) == 0){
+    p->state = UNUSED;
+    return 0;
+  }
+  sp = p->kstack + KSTACKSIZE;
+
+  // Leave room for trap frame.
+  sp -= sizeof *p->tf;
+  p->tf = (struct trapframe*)sp;
+
+  // Set up new context to start executing at forkret,
+  // which returns to trapret.
+  sp -= 4;
+  *(uint*)sp = (uint)trapret;
+
+  sp -= sizeof *p->context;
+  p->context = (struct context*)sp;
+  memset(p->context, 0, sizeof *p->context);
+  p->context->eip = (uint)forkret;
+
+  return p;
+}
 int 
 clone(void(*fcn)(void*,void*), void *arg1, void *arg2, void* stack)
 {
@@ -130,89 +213,6 @@ join(void ** stack)
     // Wait for children to exit.  (See wakeup1 call in proc_exit.)
     sleep(curproc, &ptable.lock);  //DOC: wait-sleep
   }
-}
-
-// Must be called with interrupts disabled to avoid the caller being
-// rescheduled between reading lapicid and running through the loop.
-struct cpu*
-mycpu(void)
-{
-  int apicid, i;
-  
-  if(readeflags()&FL_IF)
-    panic("mycpu called with interrupts enabled\n");
-  
-  apicid = lapicid();
-  // APIC IDs are not guaranteed to be contiguous. Maybe we should have
-  // a reverse map, or reserve a register to store &cpus[i].
-  for (i = 0; i < ncpu; ++i) {
-    if (cpus[i].apicid == apicid)
-      return &cpus[i];
-  }
-  panic("unknown apicid\n");
-}
-
-// Disable interrupts so that we are not rescheduled
-// while reading proc from the cpu structure
-struct proc*
-myproc(void) {
-  struct cpu *c;
-  struct proc *p;
-  pushcli();
-  c = mycpu();
-  p = c->proc;
-  popcli();
-  return p;
-}
-
-//PAGEBREAK: 32
-// Look in the process table for an UNUSED proc.
-// If found, change state to EMBRYO and initialize
-// state required to run in the kernel.
-// Otherwise return 0.
-static struct proc*
-allocproc(void)
-{
-  struct proc *p;
-  char *sp;
-
-  acquire(&ptable.lock);
-
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == UNUSED)
-      goto found;
-
-  release(&ptable.lock);
-  return 0;
-
-found:
-  p->state = EMBRYO;
-  p->pid = nextpid++;
-
-  release(&ptable.lock);
-
-  // Allocate kernel stack.
-  if((p->kstack = kalloc()) == 0){
-    p->state = UNUSED;
-    return 0;
-  }
-  sp = p->kstack + KSTACKSIZE;
-
-  // Leave room for trap frame.
-  sp -= sizeof *p->tf;
-  p->tf = (struct trapframe*)sp;
-
-  // Set up new context to start executing at forkret,
-  // which returns to trapret.
-  sp -= 4;
-  *(uint*)sp = (uint)trapret;
-
-  sp -= sizeof *p->context;
-  p->context = (struct context*)sp;
-  memset(p->context, 0, sizeof *p->context);
-  p->context->eip = (uint)forkret;
-
-  return p;
 }
 
 //PAGEBREAK: 32

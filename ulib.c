@@ -105,7 +105,20 @@ memmove(void *vdst, const void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+int thread_create(void (*start_routine)(void *, void *), void* arg1, void* arg2)
+{
+  void* stack;
+  stack = malloc(PGSIZE);
 
+  return clone(start_routine, arg1, arg2, stack);
+}
+
+int thread_join()
+{
+  void * stackPtr;
+  int x = join(&stackPtr);
+  return x;
+}
 int lock_init(lock_t *lk)
 {
   lk->flag = 0;
