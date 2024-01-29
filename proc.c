@@ -138,7 +138,8 @@ clone(void(*fcn)(void*,void*), void *arg1, void *arg2, void* stack)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
-  
+  curproc->count_thread=curproc->count_thread+1;
+  np->is_thread=1;
   void * sarg1, *sarg2, *sret;
 
   sret = stack + PGSIZE - 3 * sizeof(void *);
@@ -199,6 +200,8 @@ join(void ** stack)
         p->state = UNUSED;
         stack = p->threadstack;//
         p->threadstack = 0;
+        curproc->count_thread=curproc->count_thread-1;
+        p->is_thread=0;
         release(&ptable.lock);
         return pid;
       }
@@ -299,7 +302,9 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
-
+  np->count_thread=0;
+  np->is_thread=0;
+  np->turn=0;
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
@@ -451,64 +456,135 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  //161280
   for(;;){
+    // Enable interrupts on this processor.
     sti();
+
+    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    int ranges[NPROC + 1];
-    double sum = 0;
-    struct proc* prevProccess;
-    int numProccess = 0;
+    int numProccess=0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
       if((p->state == RUNNABLE && p->is_thread == 0) || (p->state != RUNNABLE && p->count_thread > 0))
         numProccess++;
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    {
-      if(p->state != RUNNABLE)
-        continue;
-      if(sum == 0)
-        prevProccess = p;
-      int index = p - ptable.proc;
-      double share;
-      if(p->is_thread != 0)
-        share = (1 / numProccess) * GetShare(p->parent);
-      else
-        share = (1 / numProccess);
-      ranges[index] = sum;
-      sum += share;
+    if(numProccess>1){
+      cprintf("pid ptable proc: %s \n",ptable.proc->name);
     }
-    ranges[NPROC] = sum;
-
-    double choice = (rand() % (int)(sum * 1000)) / 1000.0;
-    struct proc *choosenProccess;
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    {
-      if(p->state != RUNNABLE)
+    
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if((p->state != RUNNABLE && p->count_thread==0)|| p->is_thread==1)
         continue;
-      int index = p - ptable.proc;
-      if(choice < ranges[index])
-      {
-        choosenProccess = prevProccess;
-        break;
+      cprintf("this process select:%d name: %s\n",p->pid,p->name);
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      if(p->count_thread>0){
+        if(p->turn==0){
+          if(p->state!=RUNNABLE){
+            p->turn=1;
+            //cprintf("im here now");
+          }
+          c->proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
+          cprintf("pid :%d name: %s\n",p->pid,p->name);
+          swtch(&(c->scheduler), p->context);
+          switchkvm();
+
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+        }if(p->turn!=0){
+          int index=0;
+          struct proc *p2;
+          for(p2 = ptable.proc; p2 < &ptable.proc[NPROC]; p2++){
+            if(p2->state != RUNNABLE|| p2->is_thread==0|| p2->parent!=p)
+              continue;
+            index++;
+            if(index==p->turn){
+              c->proc = p2;
+              switchuvm(p2);
+              p2->state = RUNNING;
+              cprintf("pid :%d index of threead: %d name: %s\n",p->pid,index,p->name);
+              swtch(&(c->scheduler), p2->context);
+              switchkvm();
+
+              // Process is done running for now.
+              // It should have changed its p->state before coming back.
+              c->proc = 0;
+              break;
+            }
+          }
+        }
+        p->turn=(p->turn+1)%(p->count_thread+1);
       }
-      else
-        prevProccess = p;
+      else{
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        cprintf("pid :%d name: %s\n",p->pid,p->name);
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
     }
-
-    c->proc = choosenProccess;
-    switchuvm(choosenProccess);
-    choosenProccess->state = RUNNING;
-    swtch(&(c->scheduler), choosenProccess->context);
-    switchkvm();
-    c->proc = 0;
     release(&ptable.lock);
-  }
-  // for(;;){
-  //   // Enable interrupts on this processor.
-  //   sti();
 
-  //   // Loop over process table looking for process to run.
+  }}
+  //161280
+  // for(;;){
+  //   sti();
   //   acquire(&ptable.lock);
+  //   int ranges[NPROC + 1];
+  //   double sum = 0;
+  //   struct proc* prevProccess=ptable.proc;
+  //   int numProccess = 0;
+  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  //     if((p->state == RUNNABLE && p->is_thread == 0) || (p->state != RUNNABLE && p->count_thread > 0))
+  //       numProccess++;
+  //   // if(numProccess==0){
+  //   //   cprintf("0 process");
+  //   // }
+  //   if(numProccess!=0){
+  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  //   {
+  //     if(p->state != RUNNABLE)
+  //       continue;
+  //     if(sum == 0)
+  //       prevProccess = p;
+  //     int index = p - ptable.proc;
+  //     double share;
+  //     if(p->is_thread != 0)
+  //       share = (1 / numProccess) * GetShare(p->parent);
+  //     else
+  //       share = (1 / numProccess);
+  //     ranges[index] = sum;
+  //     sum += share;
+  //   }
+  //   ranges[NPROC] = sum;
+
+  //   double choice = (rand() % (int)(sum * 1000)) / 1000.0;
+  //   struct proc *choosenProccess=ptable.proc;
+  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  //   {
+  //     if(p->state != RUNNABLE)
+  //       continue;
+  //     int index = p - ptable.proc;
+  //     if(choice < ranges[index])
+  //     {
+  //       choosenProccess = prevProccess;
+  //       break;
+  //     }
+  //     else
+  //       prevProccess = p;
+  //   }
+  //   if(numProccess>=1){
+  //     cprintf("%s\n",choosenProccess->name);
+  //   }
+  //   // if(choosenProccess->pid!=1)
+  //   //   cprintf("prosess %d\n",choosenProccess->pid);
   //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
   //     if(p->state != RUNNABLE)
   //       continue;
@@ -516,21 +592,28 @@ scheduler(void)
   //     // Switch to chosen process.  It is the process's job
   //     // to release ptable.lock and then reacquire it
   //     // before jumping back to us.
-  //     c->proc = p;
-  //     switchuvm(p);
-  //     p->state = RUNNING;
+  //     c->proc = choosenProccess;
+  //     switchuvm(choosenProccess);
+  //     choosenProccess->state = RUNNING;
 
-  //     swtch(&(c->scheduler), p->context);
+  //     swtch(&(c->scheduler), choosenProccess->context);
   //     switchkvm();
 
   //     // Process is done running for now.
   //     // It should have changed its p->state before coming back.
   //     c->proc = 0;
   //   }
+  //   // c->proc = choosenProccess;
+  //   // switchuvm(choosenProccess);
+  //   // choosenProccess->state = RUNNING;
+  //   // swtch(&(c->scheduler), choosenProccess->context);
+  //   //cprintf("ppppp\n");
+  //   // switchkvm();
+  //   // c->proc = 0;
+  //   }
   //   release(&ptable.lock);
-
   // }
-}
+
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
