@@ -47,5 +47,6 @@ int main()
     wait();
     wait();
     // printf("%d\n", x);
+    exit();
     return 0;
 }

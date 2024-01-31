@@ -58,4 +58,5 @@ int main()
     thread_join();
     thread_join();
     printf(1,"temp :%d with lock\n",temp);
+    exit();
 }
